@@ -25,22 +25,4 @@ public class BookRepository {
         return this.bookTable.getItem(r -> r.key(k -> k.partitionValue(id)));
     }
 
-    public void save(Book book) {
-        bookTable.putItem(book);
-    }
-
-    public void delete(String id) {
-        this.bookTable.deleteItem(r -> r.key(k -> k.partitionValue(id)));
-    }
-
-    public void update(String id, Book book) {
-        Book bookInDb = this.bookTable.getItem(r -> r.key(k -> k.partitionValue(id)));
-
-        bookInDb.setName(book.getName());
-        bookInDb.setRating(book.getRating());
-        bookInDb.setAuthor(book.getAuthor());
-        bookInDb.setPrice(book.getPrice());
-
-        bookTable.putItem(bookInDb);
-    }
 }

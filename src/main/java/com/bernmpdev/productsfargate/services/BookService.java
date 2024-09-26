@@ -22,15 +22,4 @@ public class BookService {
         return this.bookRepository.getById(id);
     }
 
-    public void save(Book book) {
-        this.bookRepository.save(book);
-    }
-
-    public void delete(String id) {
-        this.bookRepository.delete(id);
-    }
-
-    public void update(String id, Book book) {
-        this.bookRepository.update(id, book);
-    }
 }

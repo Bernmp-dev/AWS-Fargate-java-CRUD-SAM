@@ -1,0 +1,149 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+
+Resources:
+  # Cluster ECS
+  BmpProductsClusterECS:
+    Type: "AWS::ECS::Cluster"
+    Properties:
+      ClusterName: BmpProductsClusterECS
+
+  # Definição da Task Fargate
+  BmpTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: BmpFamilyTask
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !Ref BmpProductsRoleEcs
+      ContainerDefinitions:
+        - Name: BmpProductsContainer
+          Image: '199299155478.dkr.ecr.us-east-2.amazonaws.com/bmp-products-ecs:latest'  # ECR atualizado
+          PortMappings:
+            - ContainerPort: 8080
+          Environment:
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: DYNAMODB_TABLE_NAME
+              Value: "Books"
+
+  # Serviço ECS Fargate
+  BmpProductsFargateService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: BmpProductsFargateService
+      Cluster: !Ref BmpProductsClusterECS
+      DesiredCount: 1
+      LaunchType: FARGATE
+      TaskDefinition: !Ref BmpTaskDefinition
+      LoadBalancers:
+        - ContainerName: BmpProductsContainer
+          ContainerPort: 8080
+          TargetGroupArn: !Ref BmpProductsTargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets:
+            - subnet-0e4705f59062a0846
+            - subnet-0b8441943afaf5846
+          SecurityGroups:
+            - !Ref BmpProductsSecurityGroups
+          AssignPublicIp: ENABLED
+
+  # Application Load Balancer
+  BmpProductsLoadBalancer:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      Name: BmpProductsAppLB
+      Scheme: internet-facing
+      Subnets:
+        - subnet-0e4705f59062a0846
+        - subnet-0b8441943afaf5846
+      SecurityGroups:
+        - !Ref BmpProductsSecurityGroups
+      Type: application
+
+  # Target Group
+  BmpProductsTargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      Name: BmpGroupTarget
+      Port: 8080
+      Protocol: HTTP
+      VpcId: vpc-0db666dd9a3cd0ab6
+      TargetType: ip
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: "8080"
+      HealthCheckPath: "/"
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: "200"
+
+  # Listener para o Load Balancer
+  BmpProductsALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref BmpProductsTargetGroup
+      LoadBalancerArn: !Ref BmpProductsLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  # Grupo de Segurança
+  BmpProductsSecurityGroups:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow traffic on port 8080"
+      VpcId: vpc-0db666dd9a3cd0ab6
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+
+  # Role de Execução da Task ECS
+  BmpProductsRoleEcs:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: DynamoDBAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:UpdateItem'
+                  - 'dynamodb:DeleteItem'
+                  - 'dynamodb:Scan'
+                  - 'dynamodb:Query'
+                Resource: arn:aws:dynamodb:us-east-2:199299155478:table/Books
+        - PolicyName: ECRAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ecr:GetDownloadUrlForLayer'
+                  - 'ecr:BatchGetImage'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: '*'

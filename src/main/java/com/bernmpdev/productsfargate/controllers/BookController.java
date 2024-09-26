@@ -26,22 +26,4 @@ public class BookController {
     public ResponseEntity<Book> getBook(@PathVariable String id) {
         return ResponseEntity.ok(bookService.getById(id));
     }
-
-    @PostMapping
-    public ResponseEntity<Book> create(@RequestBody Book book) {
-        this.bookService.save(book);
-        return ResponseEntity.ok(book);
-    }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Book> delete(@PathVariable String id) {
-        this.bookService.delete(id);
-        return ResponseEntity.noContent().build();
-    }
-
-    @PutMapping("/{id}")
-    public ResponseEntity<Book> update(@PathVariable String id, @RequestBody Book book) {
-        this.bookService.update(id, book);
-        return ResponseEntity.ok(book);
-    }
 }
