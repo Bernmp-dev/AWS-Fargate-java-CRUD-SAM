@@ -3,44 +3,67 @@ Transform: 'AWS::Serverless-2016-10-31'
 
 Resources:
   # Cluster ECS
-  BmpProductsClusterECS:
+  BmpProductsClusterECS02:
     Type: "AWS::ECS::Cluster"
     Properties:
-      ClusterName: BmpProductsClusterECS
+      ClusterName: BmpProductsClusterECS02
 
   # Definição da Task Fargate
   BmpTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: BmpFamilyTask
+      Family: BmpTaskDefinition
       Cpu: '256'
       Memory: '512'
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
       ExecutionRoleArn: !Ref BmpProductsRoleEcs
+      TaskRoleArn: !Ref BmpProductsRoleEcs
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
       ContainerDefinitions:
-        - Name: BmpProductsContainer
-          Image: '199299155478.dkr.ecr.us-east-2.amazonaws.com/bmp-products-ecs:latest'  # ECR atualizado
+        - Name: bmp-products-app
+          Image: '199299155478.dkr.ecr.us-east-2.amazonaws.com/bmp-products-ecs:latest'
+          Cpu: 0
           PortMappings:
             - ContainerPort: 8080
+              HostPort: 8080
+              Protocol: tcp
+              AppProtocol: http
           Environment:
             - Name: AWS_REGION
               Value: !Ref AWS::Region
             - Name: DYNAMODB_TABLE_NAME
               Value: "Books"
+          Essential: true
+#          LogConfiguration:
+#            LogDriver: awslogs
+#            Options:
+#              awslogs-group: /ecs/BmpTaskDefinition
+#              awslogs-region: us-east-2
+#              awslogs-stream-prefix: ecs
+#              awslogs-create-group: "true"
+#              mode: "non-blocking"
+#              max-buffer-size: "25m"
+          HealthCheck:
+            Command: ["CMD-SHELL", "curl -f http://localhost/health?param1=1&param2=2 || exit 1"]
+            Interval: 30
+            Timeout: 5
+            Retries: 3
 
   # Serviço ECS Fargate
   BmpProductsFargateService:
     Type: AWS::ECS::Service
     Properties:
       ServiceName: BmpProductsFargateService
-      Cluster: !Ref BmpProductsClusterECS
+      Cluster: !Ref BmpProductsClusterECS02
       DesiredCount: 1
       LaunchType: FARGATE
       TaskDefinition: !Ref BmpTaskDefinition
       LoadBalancers:
-        - ContainerName: BmpProductsContainer
+        - ContainerName: bmp-products-app
           ContainerPort: 8080
           TargetGroupArn: !Ref BmpProductsTargetGroup
       NetworkConfiguration:
@@ -76,7 +99,7 @@ Resources:
       TargetType: ip
       HealthCheckProtocol: HTTP
       HealthCheckPort: "8080"
-      HealthCheckPath: "/"
+      HealthCheckPath: "/health"
       HealthCheckIntervalSeconds: 30
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 5
@@ -122,20 +145,12 @@ Resources:
             Principal:
               Service: ecs-tasks.amazonaws.com
             Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonSNSFullAccess
       Policies:
-        - PolicyName: DynamoDBAccessPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 'dynamodb:PutItem'
-                  - 'dynamodb:GetItem'
-                  - 'dynamodb:UpdateItem'
-                  - 'dynamodb:DeleteItem'
-                  - 'dynamodb:Scan'
-                  - 'dynamodb:Query'
-                Resource: arn:aws:dynamodb:us-east-2:199299155478:table/Books
         - PolicyName: ECRAccessPolicy
           PolicyDocument:
             Version: '2012-10-17'
@@ -143,6 +158,8 @@ Resources:
               - Effect: Allow
                 Action:
                   - 'ecr:GetDownloadUrlForLayer'
+                  - 'ecr:BatchCheckLayerAvailability'
+                  - 'ecr:GetAuthorizationToken'
                   - 'ecr:BatchGetImage'
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
